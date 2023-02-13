@@ -1,0 +1,78 @@
+version: "3.7"
+x-dp-common:
+  &dp-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file: ./.env
+  volumes:
+    - .:/app
+
+services:
+  app-api:
+    <<: *dp-common
+    container_name: app-api
+    build: .
+    # env_file: ./.env
+    # hostname: dp-api-service
+    ports:
+      - ${API_PORT}:${API_PORT}
+    command: python3 main.py
+    restart: always
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - 6379:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 50
+    restart: always
+
+  celery-worker:
+    <<: *dp-common
+    container_name: celery-worker
+    command: celery -A job.celery worker -Q default --loglevel=INFO -c 4
+    restart: always
+    depends_on:
+      - app-api
+      - redis
+
+  # dp-service-worker-ecom:
+  #   <<: *dp-common
+  #   container_name: dp-service-worker-ecom
+  #   command: celery -A job.celery worker -Q all_shop --loglevel=INFO -c 4
+
+  # dp-service-scheduler:
+  #   <<: *dp-common
+  #   container_name: dp-service-scheduler
+  #   command: celery -A job.celery beat --loglevel=INFO
+
+  flower:
+    <<: *dp-common
+    container_name: flower
+    # command: celery flower -A job.celery
+    command: celery -A job.celery flower
+    # volumes:
+    #   - ./examples:/data
+    # working_dir: /data
+    ports:
+      - 5555:5555
+    # environment:
+    #   CELERY_BROKER_URL: redis://redis
+    #   CELERY_RESULT_BACKEND: redis://redis
+    restart: always
+    depends_on:
+      - app-api
+      - redis
+      - celery-worker
+
+# volumes:
+  # use a shared gopath, avoid re-download module each go running
+
+# networks:
+#   viettel_network:
+#       name: viettel_network
